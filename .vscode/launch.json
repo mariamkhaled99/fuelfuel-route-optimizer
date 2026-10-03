@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Django: run local server",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/manage.py",
+      "args": [
+        "runserver",
+        "--noreload"
+      ],
+      "django": true,
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": true
+    },
+    {
+      "name": "Pytest: debug current file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-q"
+      ],
+      "envFile": "${workspaceFolder}/.env.test",
+      "env": {
+        "DJANGO_ENV": "test",
+        "DJANGO_SETTINGS_MODULE": "core.test_settings"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
