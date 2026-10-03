@@ -35,6 +35,27 @@ uv run python manage.py runserver
 
 The health endpoint is `http://127.0.0.1:8000/api/health/` and returns `{"status":"ok"}` when the service is running. Set `ENABLE_NPLUSONE=True` in `.env` to enable local N+1 profiling; it is disabled in tests and other environments. Django Debug Toolbar is available locally while `DEBUG=True`.
 
+## Seeding fuel stations
+
+Run `uv run python manage.py seed_stations` to load station and retail-price rows
+from `data/fuel-prices-for-be-assessment.csv`. You can pass a different CSV path
+as the first argument. Duplicate OPIS IDs are consolidated, with the last CSV
+row supplying that station's values.
+
+The command geocodes each distinct `address, city, state, USA` query using
+Nominatim's Search API. Uncached requests are sequential and at least one second
+apart; successful and empty results are persisted in
+`data/.nominatim-cache.jsonl` and reused on later runs. The full dataset can take
+hours to geocode. Run only one process on one machine, do not schedule repeated
+bulk imports, and do not exceed Nominatim's one-request-per-second limit. The
+public service discourages larger or recurring bulk geocoding; use another
+provider or a self-hosted Nominatim instance for those cases. Use
+`--nominatim-url` to select a different compatible service endpoint.
+
+OpenStreetMap data is © OpenStreetMap contributors and is available under the
+[ODbL](https://www.openstreetmap.org/copyright). Attribute OpenStreetMap when
+displaying geocoded data.
+
 ## API Documentation
 
 - OpenAPI schema: `/api/schema/`

@@ -158,6 +158,7 @@ ENV/
 env.bak/
 venv.bak/
 data/create_postgres.sql
+/data/.nominatim-cache.jsonl
 
 # Spyder project settings
 .spyderproject
@@ -221,5 +222,4 @@ __marimo__/
 
 
 .history/
-
 
