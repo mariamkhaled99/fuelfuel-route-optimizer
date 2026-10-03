@@ -291,53 +291,65 @@ class Command(BaseCommand):
         row_count, stations = load_station_rows(csv_path)
         self.stdout.write(
             f"Loaded {row_count} rows for {len(stations)} unique stations. "
-            "Geocoding uncached addresses sequentially (at most one request/second)."
+            "Saving station and price data before geocoding."
         )
 
-        queries = dict.fromkeys(station.geocoding_query for station in stations)
-        with NominatimGeocoder(
-            url=nominatim_url,
-            user_agent=user_agent,
-            cache_path=cache_file,
-        ) as geocoder:
-            coordinates = {}
-            for query_number, query in enumerate(queries, start=1):
-                coordinates[query] = geocoder.geocode(query)
-                if query_number % 25 == 0 or query_number == len(queries):
-                    self.stdout.write(
-                        f"Processed {query_number}/{len(queries)} location queries "
-                        f"({geocoder.request_count} requests, "
-                        f"{geocoder.cache_hits} cache hits)."
-                    )
-
-            matched = sum(value is not None for value in coordinates.values())
-            unmatched = len(coordinates) - matched
-            with transaction.atomic():
-                for seed in stations:
-                    defaults = {
+        stations_by_query: dict[str, list[StationSeed]] = {}
+        with transaction.atomic():
+            for seed in stations:
+                station, _ = FuelStation.objects.update_or_create(
+                    opis_id=seed.opis_id,
+                    defaults={
                         "name": seed.name,
                         "address": seed.address,
                         "city": seed.city,
                         "state": seed.state,
                         "rack_id": seed.rack_id,
-                    }
-                    location = coordinates[seed.geocoding_query]
-                    if location is not None:
-                        defaults["latitude"], defaults["longitude"] = location
-
-                    station, _ = FuelStation.objects.update_or_create(
-                        opis_id=seed.opis_id,
-                        defaults=defaults,
+                    },
+                )
+                price = station.prices.order_by("pk").first()
+                if price is None:
+                    FuelPrice.objects.create(
+                        station=station,
+                        price_per_gallon=seed.price_per_gallon,
                     )
-                    price = station.prices.order_by("pk").first()
-                    if price is None:
-                        FuelPrice.objects.create(
-                            station=station,
-                            price_per_gallon=seed.price_per_gallon,
-                        )
-                    elif price.price_per_gallon != seed.price_per_gallon:
-                        price.price_per_gallon = seed.price_per_gallon
-                        price.save(update_fields=("price_per_gallon",))
+                elif price.price_per_gallon != seed.price_per_gallon:
+                    price.price_per_gallon = seed.price_per_gallon
+                    price.save(update_fields=("price_per_gallon",))
+
+                stations_by_query.setdefault(seed.geocoding_query, []).append(seed)
+
+        self.stdout.write(
+            f"Saved {len(stations)} stations and prices. "
+            "Geocoding uncached addresses sequentially "
+            "(at most one request/second)."
+        )
+        with NominatimGeocoder(
+            url=nominatim_url,
+            user_agent=user_agent,
+            cache_path=cache_file,
+        ) as geocoder:
+            matched = 0
+            unmatched = 0
+            for query_number, (query, seeds) in enumerate(
+                stations_by_query.items(), start=1
+            ):
+                location = geocoder.geocode(query)
+                if location is None:
+                    unmatched += 1
+                else:
+                    matched += 1
+                    FuelStation.objects.filter(
+                        opis_id__in=[seed.opis_id for seed in seeds]
+                    ).update(latitude=location[0], longitude=location[1])
+
+                if query_number % 25 == 0 or query_number == len(stations_by_query):
+                    self.stdout.write(
+                        f"Processed {query_number}/{len(stations_by_query)} "
+                        "location queries "
+                        f"({geocoder.request_count} requests, "
+                        f"{geocoder.cache_hits} cache hits)."
+                    )
 
             self.stdout.write(
                 self.style.SUCCESS(
