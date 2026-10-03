@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+.env.test.local
 .envrc
 .venv
 env/
@@ -156,6 +157,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+data/create_postgres.sql
 
 # Spyder project settings
 .spyderproject
@@ -216,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+.history/
+
+

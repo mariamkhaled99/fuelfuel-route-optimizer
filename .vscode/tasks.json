@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Django: migrate local PostgreSQL",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "manage.py",
+        "migrate"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pytest: PostgreSQL",
+      "type": "process",
+      "command": "uv",
+      "args": [
+        "run",
+        "pytest"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

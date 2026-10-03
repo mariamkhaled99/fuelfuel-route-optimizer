@@ -1,0 +1,30 @@
+[project]
+name = "fuelfuel-route-optimizer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "mariam eissa", email = "mariamkhaled999@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "django>=6.1.1",
+    "django-environ>=0.14.0",
+    "djangorestframework>=3.18.1",
+    "drf-spectacular>=0.30.0",
+    "httpx>=0.28.1",
+    "openpyxl>=3.1.5",
+    "psycopg[binary]>=3.3.6",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "django-browser-reload>=1.21.0",
+    "django-debug-toolbar>=8.0.0",
+    "django-nplusone>=0.0.5",
+    "isort>=9.0.2",
+    "pylint>=4.1.2",
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+]
