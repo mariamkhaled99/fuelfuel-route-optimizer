@@ -50,18 +50,15 @@ state. That way the station table has data even while the slower geocoding work
 is still running:
 
 1. It builds one search query per distinct `address, city, state, USA` location.
-2. It sends each uncached query to the
+2. It sends each query to the
    [Nominatim Search API](https://nominatim.org/release-docs/develop/api/Search/)
    with `format=jsonv2`, `limit=1`, and `countrycodes=us`.
 3. Each location result is saved to the database as it is processed. If there
    is no result, the station's coordinates are left blank.
-4. Both matched and unmatched queries are written to
-   `data/.nominatim-cache.jsonl`, so later seed runs reuse them without making
-   the same request again.
 
 The geocoder uses the
 [Nominatim public-service policy](https://operations.osmfoundation.org/policies/nominatim/):
-uncached requests run sequentially at no more than one per second, with an
+requests run sequentially at no more than one per second, with an
 identifying User-Agent. The full dataset can take hours to geocode. Run only
 one process on one machine, do not schedule repeated bulk imports, and do not
 exceed the request limit. The public service discourages larger or recurring
