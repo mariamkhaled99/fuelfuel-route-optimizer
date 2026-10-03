@@ -42,15 +42,29 @@ from `data/fuel-prices-for-be-assessment.csv`. You can pass a different CSV path
 as the first argument. Duplicate OPIS IDs are consolidated, with the last CSV
 row supplying that station's values.
 
-The command geocodes each distinct `address, city, state, USA` query using
-Nominatim's Search API. Uncached requests are sequential and at least one second
-apart; successful and empty results are persisted in
-`data/.nominatim-cache.jsonl` and reused on later runs. The full dataset can take
-hours to geocode. Run only one process on one machine, do not schedule repeated
-bulk imports, and do not exceed Nominatim's one-request-per-second limit. The
-public service discourages larger or recurring bulk geocoding; use another
-provider or a self-hosted Nominatim instance for those cases. Use
-`--nominatim-url` to select a different compatible service endpoint.
+### How station geodata is geocoded
+
+The seed command fills station latitude and longitude from the CSV's address,
+city, and state:
+
+1. It builds one search query per distinct `address, city, state, USA` location.
+2. It sends each uncached query to the
+   [Nominatim Search API](https://nominatim.org/release-docs/develop/api/Search/)
+   with `format=jsonv2`, `limit=1`, and `countrycodes=us`.
+3. When a result is returned, its latitude and longitude are saved on the
+   station. If there is no result, the coordinates are left blank.
+4. Both matched and unmatched queries are written to
+   `data/.nominatim-cache.jsonl`, so later seed runs reuse them without making
+   the same request again.
+
+The geocoder uses the
+[Nominatim public-service policy](https://operations.osmfoundation.org/policies/nominatim/):
+uncached requests run sequentially at no more than one per second, with an
+identifying User-Agent. The full dataset can take hours to geocode. Run only
+one process on one machine, do not schedule repeated bulk imports, and do not
+exceed the request limit. The public service discourages larger or recurring
+bulk geocoding; use another provider or a self-hosted Nominatim instance for
+those cases. Use `--nominatim-url` to select a different compatible endpoint.
 
 OpenStreetMap data is © OpenStreetMap contributors and is available under the
 [ODbL](https://www.openstreetmap.org/copyright). Attribute OpenStreetMap when
