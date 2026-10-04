@@ -34,8 +34,8 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DEBUG", default=ENVIRONMENT == "local")
 ENABLE_NPLUSONE = ENVIRONMENT == "local" and env.bool("ENABLE_NPLUSONE", default=False)
-ENABLE_BROWSER_RELOAD = (
-    ENVIRONMENT == "local" and env.bool("ENABLE_BROWSER_RELOAD", default=False)
+ENABLE_BROWSER_RELOAD = ENVIRONMENT == "local" and env.bool(
+    "ENABLE_BROWSER_RELOAD", default=False
 )
 
 ALLOWED_HOSTS = []
@@ -108,6 +108,23 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API for optimizing fuel stops along road trips.",
     "VERSION": "1.0.0",
 }
+
+NOMINATIM_SEARCH_URL = env(
+    "NOMINATIM_SEARCH_URL",
+    default="https://nominatim.openstreetmap.org/search",
+)
+NOMINATIM_USER_AGENT = env(
+    "NOMINATIM_USER_AGENT",
+    default=(
+        "FuelFuelRouteOptimizer/1.0 "
+        "(https://github.com/mariamkhaled99/fuelfuel-route-optimizer)"
+    ),
+)
+OSRM_ROUTE_URL = env(
+    "OSRM_ROUTE_URL",
+    default="https://router.project-osrm.org/route/v1/driving",
+)
+TRIP_PLAN_CACHE_SECONDS = env.int("TRIP_PLAN_CACHE_SECONDS", default=300)
 
 
 # Database

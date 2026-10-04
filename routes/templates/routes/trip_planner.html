@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FuelFuel Trip Planner</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    >
+    <style>
+      body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 1100px; padding: 0 1rem; }
+      form { display: grid; gap: 0.75rem; grid-template-columns: 1fr 1fr auto; }
+      input, button { font: inherit; padding: 0.65rem; }
+      button { cursor: pointer; }
+      #map { height: 65vh; min-height: 400px; margin-top: 1rem; }
+      #result { line-height: 1.5; white-space: pre-line; }
+      #status { min-height: 1.5rem; }
+      @media (max-width: 700px) {
+        form { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>FuelFuel Trip Planner</h1>
+      <p>Enter two U.S. locations to see a route and recommended fuel stops.</p>
+      <form id="trip-form">
+        <label>
+          Start location
+          <input name="origin" autocomplete="street-address" required maxlength="255">
+        </label>
+        <label>
+          Finish location
+          <input name="destination" autocomplete="street-address" required maxlength="255">
+        </label>
+        <button type="submit">Plan trip</button>
+      </form>
+      <p id="status" role="status"></p>
+      <section id="result" aria-live="polite"></section>
+      <div id="map" role="img" aria-label="Trip route and recommended fuel stops map"></div>
+      <p>Map data © OpenStreetMap contributors.</p>
+    </main>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const map = L.map("map").setView([39.5, -98.35], 4);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      let resultLayers = L.featureGroup().addTo(map);
+      const form = document.querySelector("#trip-form");
+      const status = document.querySelector("#status");
+      const result = document.querySelector("#result");
+
+      function addStopMarker(stop) {
+        const popup = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = `Fuel stop ${stop.sequence}: ${stop.station}`;
+        const details = document.createElement("p");
+        details.textContent =
+          `${stop.city}, ${stop.state} · $${stop.price_per_gallon}/gal · ` +
+          `${stop.gallons_to_buy} gal · $${stop.estimated_cost}`;
+        popup.append(title, details);
+        L.marker([stop.latitude, stop.longitude])
+          .bindPopup(popup)
+          .addTo(resultLayers);
+      }
+
+      function addLocationMarker(location, label) {
+        const popup = document.createElement("div");
+        popup.textContent = `${label}: ${location.label}`;
+        L.marker([location.latitude, location.longitude])
+          .bindPopup(popup)
+          .addTo(resultLayers);
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        status.textContent = "Finding locations and planning the route…";
+        result.textContent = "";
+        resultLayers.clearLayers();
+
+        try {
+          const formData = new FormData(form);
+          const response = await fetch("/api/trips/plan/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              origin: formData.get("origin"),
+              destination: formData.get("destination")
+            })
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.success) {
+            const detail = payload.errors
+              ? JSON.stringify(payload.errors)
+              : payload.message;
+            throw new Error(detail || "Trip planning failed.");
+          }
+
+          const trip = payload.data;
+          L.geoJSON(trip.route_geometry, {
+            style: { color: "#1769aa", weight: 5 }
+          }).addTo(resultLayers);
+          addLocationMarker(trip.origin, "Start");
+          addLocationMarker(trip.destination, "Finish");
+          trip.fuel_stops.forEach(addStopMarker);
+
+          result.textContent =
+            `Route: ${trip.route_distance_miles} miles\n` +
+            `Estimated fuel purchases at stops: $${trip.total_fuel_cost}\n` +
+            (trip.fuel_stops.length
+              ? `Recommended fuel stops: ${trip.fuel_stops.length}`
+              : "No stop needed with the starting tank.");
+          map.fitBounds(resultLayers.getBounds(), { padding: [24, 24] });
+          status.textContent = "Trip plan ready.";
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      });
+    </script>
+  </body>
+</html>
