@@ -44,21 +44,39 @@ POST /api/trips/plan/
 Content-Type: application/json
 
 {
-  "origin": "Tulsa, OK",
-  "destination": "Dallas, TX"
+  "origin": "New York, NY",
+  "destination": "Chicago, IL"
 }
 ```
 
-The API geocodes the two U.S. locations with Nominatim, then makes one OSRM
-driving-route request. Successful responses include the route as GeoJSON
-`LineString` geometry, route distance in miles, recommended fuel stops, and
-`total_fuel_cost`. That cost is the estimated cost of fuel purchased at the
-recommended stops; the starting tank is assumed full (500-mile range at 10 MPG),
-so it does not count fuel purchased before the trip.
+The trip planner processes a request in this order:
+
+1. Geocode the origin and destination with Nominatim.
+2. Request the road route, distance, and GeoJSON geometry from OSRM.
+3. Load fuel stations and their stored prices from PostgreSQL.
+4. Find stations within 10 miles of the route and project them onto the route.
+5. Apply the vehicle's 500-mile maximum range, accounting for fuel already in
+   the tank.
+6. Repeatedly select the lowest-priced reachable station; when prices tie, the
+   farther station is preferred. Continue until the destination is reachable.
+7. Calculate the estimated cost of fuel purchased at the recommended stops.
+8. Return the route, stops, and cost if a complete itinerary is feasible.
+
+Successful responses include the route as GeoJSON `LineString` geometry, route
+distance in miles, recommended fuel stops, and `total_fuel_cost`. The starting
+tank is assumed full (500-mile range at 10 MPG), so the total does not count fuel
+purchased before the trip. If the location cannot be found, the route cannot be
+calculated, or no complete fuel-stop itinerary is possible, the API returns an
+error rather than a partial plan.
 
 Open `http://127.0.0.1:8000/api/trip-planner/` for a basic interactive map. It
 submits the same API request, draws the returned GeoJSON route, and marks the
-origin, destination, and recommended fuel stops.
+origin, destination, and recommended fuel stops. The page uses Leaflet to render
+the GeoJSON route over OpenStreetMap tiles.
+
+Example Leaflet map showing a route and its recommended fuel stops:
+
+![FuelFuel trip planner map rendered with Leaflet, showing the route and fuel-stop markers](docs/images/leaflet-trip-planner.png)
 
 Nominatim coordinates are cached for 30 days, and cache misses are rate-limited
 to at most one Nominatim request per second. Configure a shared Django cache in
@@ -76,6 +94,27 @@ The map also shows higher-priced station alternatives in red when they have
 coordinates and a price, lie within 10 miles of the route, and are reachable
 within the same 500-mile (or remaining initial-fuel) window as a recommended
 stop. The popup displays their price and route mile marker.
+
+### Free public services and usage requirements
+
+The planner uses these free public APIs over HTTP via `httpx`; they are not
+Python libraries.
+
+**Nominatim — geocoding**
+
+- Send an identifying `User-Agent` and make no more than one request per second.
+- Do not use the public service for large or recurring bulk geocoding; see the
+  [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Attribute OpenStreetMap when displaying its data.
+
+**OSRM — road routing**
+
+- The public demo server is best-effort and has no production availability
+  guarantee.
+- Avoid bulk or high-volume requests; use a hosted or self-managed service for
+  production traffic.
+- Follow the [OSRM routing API documentation](https://project-osrm.org/docs/v5.24.0/api/#route-service)
+  for supported request parameters and response formats.
 
 ## Seeding fuel stations
 
