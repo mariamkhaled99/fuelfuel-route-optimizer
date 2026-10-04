@@ -65,9 +65,17 @@ to at most one Nominatim request per second. Configure a shared Django cache in
 multi-process deployments so those protections apply across workers. Provider
 URLs and the identifying Nominatim User-Agent can be overridden with
 `NOMINATIM_SEARCH_URL`, `NOMINATIM_USER_AGENT`, and `OSRM_ROUTE_URL` environment
-variables. The default OSRM public demo server is best-effort; use an
-appropriate hosted or self-managed service for production traffic. Attribute
-OpenStreetMap data on the map.
+variables. A complete successful trip result is cached for five minutes by the
+normalized, ordered origin/destination pair; set `TRIP_PLAN_CACHE_SECONDS` to
+change this period. Cached results include the fuel prices and costs, so they
+may remain unchanged until the cache expires. The default OSRM public demo
+server is best-effort; use an appropriate hosted or self-managed service for
+production traffic. Attribute OpenStreetMap data on the map.
+
+The map also shows higher-priced station alternatives in red when they have
+coordinates and a price, lie within 10 miles of the route, and are reachable
+within the same 500-mile (or remaining initial-fuel) window as a recommended
+stop. The popup displays their price and route mile marker.
 
 ## Seeding fuel stations
 

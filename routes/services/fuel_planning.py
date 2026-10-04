@@ -278,7 +278,7 @@ def plan_trip_fuel_stops(trip: Trip) -> list[TripFuelStop]:
     if trip.route_distance_miles is None:
         raise FuelStopPlanningError("Trip must have a route distance before planning.")
 
-    stations = (
+    stations = list(
         FuelStation.objects.filter(
             latitude__isnull=False,
             longitude__isnull=False,

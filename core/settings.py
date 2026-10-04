@@ -124,6 +124,7 @@ OSRM_ROUTE_URL = env(
     "OSRM_ROUTE_URL",
     default="https://router.project-osrm.org/route/v1/driving",
 )
+TRIP_PLAN_CACHE_SECONDS = env.int("TRIP_PLAN_CACHE_SECONDS", default=300)
 
 
 # Database

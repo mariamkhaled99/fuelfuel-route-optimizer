@@ -2,7 +2,7 @@
 
 import hashlib
 import time
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
@@ -13,7 +13,9 @@ from django.core.cache import cache
 from django.db import transaction
 
 from routes.models import Trip
-from routes.services.fuel_planning import plan_trip_fuel_stops
+from routes.services.fuel_planning import (
+    plan_trip_fuel_stops,
+)
 
 NOMINATIM_CACHE_SECONDS = 30 * 24 * 60 * 60
 NOMINATIM_REQUEST_INTERVAL_SECONDS = 1
@@ -21,6 +23,7 @@ NOMINATIM_LOCK_TIMEOUT_SECONDS = 30
 METERS_PER_MILE = Decimal("1609.344")
 DISTANCE_QUANTUM = Decimal("0.01")
 COORDINATE_QUANTUM = Decimal("0.000001")
+TRIP_PLAN_CACHE_VERSION = 1
 
 
 class TripPlanningProviderError(RuntimeError):
@@ -40,6 +43,15 @@ def _cache_key_for_location(query: str) -> str:
     normalized = " ".join(query.casefold().split())
     digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
     return f"trip-geocode:{digest}"
+
+
+def _cache_key_for_trip(origin: str, destination: str) -> str:
+    """Create an ordered cache key for a normalized origin-destination pair."""
+    normalized = "\0".join(
+        " ".join(value.casefold().split()) for value in (origin, destination)
+    )
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return f"trip-plan:v{TRIP_PLAN_CACHE_VERSION}:{digest}"
 
 
 def _acquire_nominatim_lock() -> str:
@@ -199,6 +211,11 @@ def _fetch_osrm_route(
 
 def build_trip_plan(origin: str, destination: str) -> dict[str, Any]:
     """Geocode a U.S. trip, request one route, and persist its fueling itinerary."""
+    trip_cache_key = _cache_key_for_trip(origin, destination)
+    cached_plan = cache.get(trip_cache_key)
+    if cached_plan is not None:
+        return cached_plan
+
     if not settings.NOMINATIM_USER_AGENT.strip():
         raise TripPlanningProviderError(
             "Configure NOMINATIM_USER_AGENT with an identifying application name."
@@ -232,7 +249,7 @@ def build_trip_plan(origin: str, destination: str) -> dict[str, Any]:
         )
         fuel_stops = plan_trip_fuel_stops(trip)
 
-    return {
+    result = {
         "trip_id": trip.pk,
         "origin": {
             "label": trip.origin,
@@ -262,5 +279,8 @@ def build_trip_plan(origin: str, destination: str) -> dict[str, Any]:
             }
             for stop in fuel_stops
         ],
+ 
         "total_fuel_cost": trip.estimated_fuel_cost or Decimal("0.00"),
     }
+    cache.set(trip_cache_key, result, settings.TRIP_PLAN_CACHE_SECONDS)
+    return result
