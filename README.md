@@ -35,6 +35,40 @@ uv run python manage.py runserver
 
 The health endpoint is `http://127.0.0.1:8000/api/health/` and returns `{"status":"ok"}` when the service is running. Set `ENABLE_NPLUSONE=True` in `.env` to enable local N+1 profiling; it is disabled in tests and other environments. Django Debug Toolbar is available locally while `DEBUG=True`.
 
+## Trip-planning API and map
+
+Create a route and fuel-stop plan with:
+
+```http
+POST /api/trips/plan/
+Content-Type: application/json
+
+{
+  "origin": "Tulsa, OK",
+  "destination": "Dallas, TX"
+}
+```
+
+The API geocodes the two U.S. locations with Nominatim, then makes one OSRM
+driving-route request. Successful responses include the route as GeoJSON
+`LineString` geometry, route distance in miles, recommended fuel stops, and
+`total_fuel_cost`. That cost is the estimated cost of fuel purchased at the
+recommended stops; the starting tank is assumed full (500-mile range at 10 MPG),
+so it does not count fuel purchased before the trip.
+
+Open `http://127.0.0.1:8000/api/trip-planner/` for a basic interactive map. It
+submits the same API request, draws the returned GeoJSON route, and marks the
+origin, destination, and recommended fuel stops.
+
+Nominatim coordinates are cached for 30 days, and cache misses are rate-limited
+to at most one Nominatim request per second. Configure a shared Django cache in
+multi-process deployments so those protections apply across workers. Provider
+URLs and the identifying Nominatim User-Agent can be overridden with
+`NOMINATIM_SEARCH_URL`, `NOMINATIM_USER_AGENT`, and `OSRM_ROUTE_URL` environment
+variables. The default OSRM public demo server is best-effort; use an
+appropriate hosted or self-managed service for production traffic. Attribute
+OpenStreetMap data on the map.
+
 ## Seeding fuel stations
 
 Run `uv run python manage.py seed_stations` to load station and retail-price rows
@@ -94,13 +128,27 @@ OpenStreetMap data is © OpenStreetMap contributors and is available under the
 [ODbL](https://www.openstreetmap.org/copyright). Attribute OpenStreetMap when
 displaying geocoded data.
 
+## Fuel-stop planning
+
+`from routes.services import plan_trip_fuel_stops` is the main service entry
+point. Calling `plan_trip_fuel_stops(trip)` calculates and saves an ordered,
+multi-stop itinerary. The trip must already have a route distance and GeoJSON
+`LineString` route geometry, and candidate stations need coordinates and a fuel
+price.
+
+Stations more than 10 miles from the route are ignored. Starting with the
+trip's available fuel, the planner repeatedly considers reachable stations,
+selects the lowest-priced one (preferring the farthest station when prices
+tie), and continues until the destination is within range. Fuel prices and
+estimated costs are recorded for each stop. A trip reachable on its starting
+fuel gets no recommended stops. If stations cannot form a complete itinerary,
+planning raises an error instead of saving a partial plan.
+
 ## API Documentation
 
 - OpenAPI schema: `/api/schema/`
 - Swagger UI: [http://127.0.0.1:8000/api/docs/](http://127.0.0.1:8000/api/docs/)
 - ReDoc: `/api/redoc/`
-
-Add route endpoints under `routes/urls.py`.
 
 ## Tests
 
