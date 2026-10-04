@@ -42,6 +42,31 @@ from `data/fuel-prices-for-be-assessment.csv`. You can pass a different CSV path
 as the first argument. Duplicate OPIS IDs are consolidated, with the last CSV
 row supplying that station's values.
 
+### CSV duplicate and cleaning notes
+
+The supplied CSV contains 8,151 rows and 6,738 distinct OPIS IDs. There are 678
+OPIS IDs with repeated rows, accounting for 1,413 rows beyond one row per ID.
+Within those repeated-ID groups:
+
+- 597 IDs have more than one retail-price value.
+- 227 IDs appear with more than one truckstop name.
+- The repeated rows for a given OPIS ID agree on address, city, state, and
+  rack ID.
+- There are 26 exact duplicate extra rows where all listed station and price
+  values repeat.
+
+This pattern suggests the repeated OPIS IDs refer to the same station, not
+different stations: station location/rack details match, while some names vary.
+The CSV has no date, fuel-type, or price-source column, so it is not possible to
+tell whether differing prices are from different dates, fuel types, or another
+source distinction. A rack ID is not a unique station identifier either: rack
+IDs are shared by multiple OPIS IDs in the file.
+
+The current seed command creates one station and one current price per OPIS ID;
+for repeated IDs, the last CSV row wins. This means earlier price values,
+alternate names, and exact duplicate rows are not stored separately. Preserve
+the original CSV if those details are needed for analysis.
+
 ### How station geodata is geocoded
 
 The seed command first writes all station and retail-price rows to the database,
