@@ -2,6 +2,19 @@
 
 FuelRoute API is a Django-based REST API that calculates an optimal, cost-effective fueling strategy for road trips across the USA.
 
+## Assignment checkpoint
+
+Build an API that:
+
+- Accepts a start location and finish location, both within the USA.
+- Returns a map of the route and cost-effective fuel stop locations based on fuel
+  prices.
+- Supports multiple stops for a vehicle with a maximum range of 500 miles.
+- Returns the total estimated fuel cost, assuming the vehicle achieves 10 miles
+  per gallon.
+- Uses the supplied fuel-price data file for station prices.
+- Uses free APIs for mapping and routing.
+
 ## Packages
 
 | Package | Why |
@@ -35,6 +48,45 @@ uv run python manage.py runserver
 
 The health endpoint is `http://127.0.0.1:8000/api/health/` and returns `{"status":"ok"}` when the service is running. Set `ENABLE_NPLUSONE=True` in `.env` to enable local N+1 profiling; it is disabled in tests and other environments. Django Debug Toolbar is available locally while `DEBUG=True`.
 
+## Code structure
+
+```text
+fuelfuel-route-optimizer/
+├── core/
+│   ├── settings.py                 # Django settings and provider configuration
+│   └── urls.py                     # Root URL routing and API documentation URLs
+├── common/
+│   ├── api_responses.py             # Standard success/error response envelope
+│   ├── api_views.py                 # Shared DRF view behavior
+│   └── swagger/                     # OpenAPI documentation helpers
+├── routes/
+│   ├── management/commands/
+│   │   └── seed_stations.py         # Load fuel prices and geocode station data
+│   ├── migrations/                  # Database schema history
+│   ├── models/
+│   │   └── fuel_planning.py         # Stations, prices, trips, and saved stops
+│   ├── serializers/
+│   │   └── trip_planning.py         # Validate request and response data
+│   ├── services/
+│   │   ├── trip_planning.py         # Geocoding, routing, trip creation, response data
+│   │   ├── fuel_planning.py         # Route geometry and fuel-stop calculations
+│   │   └── fuel_planning_types.py   # Dataclasses used by the planner
+│   ├── templates/routes/
+│   │   └── trip_planner.html        # Leaflet map and trip search form
+│   ├── tests/                       # API, planner, setup, and seed-command tests
+│   ├── urls.py                      # Route API and map page paths
+│   └── views/
+│       ├── trip_planning.py         # POST API view and map-page view
+│       └── health.py                # Health-check endpoint
+├── data/
+│   └── fuel-prices-for-be-assessment.csv
+├── docs/images/
+│   └── leaflet-trip-planner.png     # Example map screenshot
+├── manage.py
+├── pyproject.toml                   # Python dependencies and project metadata
+└── README.md
+```
+
 ## Trip-planning API and map
 
 Create a route and fuel-stop plan with:
@@ -61,6 +113,98 @@ The trip planner processes a request in this order:
    farther station is preferred. Continue until the destination is reachable.
 7. Calculate the estimated cost of fuel purchased at the recommended stops.
 8. Return the route, stops, and cost if a complete itinerary is feasible.
+
+### What the service does
+
+The main service entry point is `build_trip_plan(origin, destination)` in
+`routes/services/trip_planning.py`. In basic terms:
+
+1. It checks the cache for a recent result for the same origin and destination.
+2. It looks up each place name with Nominatim to get latitude and longitude.
+   Successful lookups are cached so the same place does not need to be looked
+   up again for 30 days.
+3. It asks OSRM for one driving route between the two coordinates. OSRM returns
+   the route distance in meters and route geometry as GeoJSON; the service
+   converts the distance to miles.
+4. It saves a `Trip` with the locations and route, then calls
+   `plan_trip_fuel_stops(trip)` in `routes/services/fuel_planning.py`.
+5. The fuel planner uses station coordinates and prices from the database to
+   calculate stops, saves those stops, and updates the trip's estimated fuel
+   cost.
+6. The service builds the result dictionary and caches the successful result
+   for the configured trip-cache period (five minutes by default).
+
+The API view in `routes/views/trip_planning.py` validates the incoming fields,
+calls the service, and converts expected problems—such as an unknown location,
+missing route, or no feasible fuel itinerary—into an HTTP error response.
+Unexpected server errors are not converted into successful responses.
+
+### Reading a successful response
+
+The API wraps successful output in a common envelope. The following values are
+an illustrative example; coordinates, route geometry, stop, and price depend on
+the request and the station data:
+
+```json
+{
+  "success": true,
+  "message": "Trip route and fuel stops planned successfully",
+  "data": {
+    "trip_id": 123,
+    "origin": {
+      "label": "Wichita, KS",
+      "latitude": 37.69,
+      "longitude": -97.34
+    },
+    "destination": {
+      "label": "Wheeling, WV",
+      "latitude": 40.06,
+      "longitude": -80.72
+    },
+    "route_distance_miles": "912.10",
+    "route_geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [-97.34, 37.69],
+        [-95.00, 38.50],
+        [-90.00, 39.50],
+        [-85.00, 40.00],
+        [-80.72, 40.06]
+      ]
+    },
+    "fuel_stops": [
+      {
+        "sequence": 1,
+        "station": "Example Travel Center",
+        "address": "100 Highway",
+        "city": "Example City",
+        "state": "MO",
+        "latitude": 39.0,
+        "longitude": -92.0,
+        "distance_from_start_miles": "400.00",
+        "gallons_to_buy": "40.000",
+        "price_per_gallon": "3.2500",
+        "estimated_cost": "130.00"
+      }
+    ],
+    "total_fuel_cost": "130.00"
+  },
+  "errors": null
+}
+```
+
+- `success`, `message`, and `errors` describe whether the API call succeeded.
+- `data.trip_id` identifies the saved trip.
+- `origin` and `destination` contain the display labels and geocoded
+  coordinates. Map coordinates are latitude/longitude; GeoJSON route points use
+  longitude/latitude order.
+- `route_distance_miles` is OSRM's road distance converted to miles.
+- `route_geometry` is a GeoJSON `LineString` that Leaflet draws on the map.
+- `fuel_stops` is ordered from the trip start. Each entry gives the station
+  location, its route mile marker, how much fuel to buy, the price per gallon,
+  and the estimated cost at that stop.
+- `total_fuel_cost` is the sum of the recommended stop purchases. It does not
+  include fuel already in the starting tank.
 
 Successful responses include the route as GeoJSON `LineString` geometry, route
 distance in miles, recommended fuel stops, and `total_fuel_cost`. The starting
